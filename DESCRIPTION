@@ -1,7 +1,7 @@
 Package: kiwisR
 Title: A Wrapper for Querying KISTERS 'WISKI' Databases via the 'KiWIS'
         API
-Version: 0.1.6
+Version: 0.1.7
 Authors@R: c(person("Ryan", "Whaley", role = c("aut", "cre"), email = "rdgwhaley@gmail.com"),
   person("Sam", "Albers", role = "ctb", email = "sam.albers@gov.bc.ca")
   )
@@ -20,9 +20,9 @@ Depends: R (>= 3.2.0)
 Imports: tibble, jsonlite, lubridate, httr, dplyr
 Suggests: ggplot2, knitr, rmarkdown, testthat
 NeedsCompilation: no
-Packaged: 2019-05-27 18:49:53 UTC; WhaleyRy
+Packaged: 2019-08-19 13:37:31 UTC; WhaleyRy
 Author: Ryan Whaley [aut, cre],
   Sam Albers [ctb]
 Maintainer: Ryan Whaley <rdgwhaley@gmail.com>
 Repository: CRAN
-Date/Publication: 2019-05-28 13:40:03 UTC
+Date/Publication: 2019-08-19 15:30:02 UTC
