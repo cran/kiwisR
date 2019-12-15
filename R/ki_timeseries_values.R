@@ -8,7 +8,9 @@
 #'  Time series ids can be found using the ki_timeseries_list function
 #' @param start_date A date string formatted "YYYY-MM-DD". Defaults to yesterday.
 #' @param end_date A date string formatted "YYYY-MM-DD". Defaults to today.
-#' @return A tibble with following columns: Timestamp, Value, ts_name, Units, station_name
+#' @param return_fields (Optional) Specific fields to return. Consult your KiWIS hub services documentation for available options.
+#' Should be a comma separate string or a vector.
+#' @return A tibble with following columns by default: Timestamp, Value, ts_name, Units, station_name
 #' @examples
 #' \dontrun{
 #' ki_timeseries_values(
@@ -19,8 +21,7 @@
 #' )
 #' }
 #'
-
-ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
+ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields) {
 
   # Default to past 24 hours
   if (missing(start_date) || missing(end_date)) {
@@ -29,6 +30,18 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
     end_date <- Sys.Date()
   } else {
     check_date(start_date, end_date)
+  }
+
+  # Account for user-provided return fields
+  if (missing(return_fields)) {
+    return_fields <- "Timestamp,Value"
+  } else {
+    if(!inherits(return_fields, "character")){
+      stop(
+        "User supplied return_fields must be comma separated string or vector of strings"
+      )
+    }
+    return_fields <- c("Timestamp", "Value", return_fields)
   }
 
   # Identify hub
@@ -46,8 +59,10 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
     "ts_unitname",
     "ts_unitsymbol",
     "ts_name",
+    "ts_id",
     "stationparameter_name",
-    "station_name"
+    "station_name",
+    "station_id"
   ),
   collapse = ","
   )
@@ -62,7 +77,11 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
     from = start_date,
     to = end_date,
     metadata = "true",
-    md_returnfields = ts_meta
+    md_returnfields = ts_meta,
+    returnfields = paste(
+      return_fields,
+      collapse = ","
+    )
   )
 
   # Send request
@@ -76,21 +95,13 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
     return(e)
   })
 
-  # Check for query error
-  if(sum(grepl("error", class(raw)))){
-    stop("Query returned error: ", raw$message)
-  }
+  check_ki_response(raw)
 
   # Parse response
-  raw_content <- httr::content(raw)
-
-  # Check for timeout / 404
-  if(class(raw) != "response" | class(raw_content) != "list"){
-    stop("Check that KiWIS hub is accessible via a web browser.")
-  }
+  raw_content <- httr::content(raw, "text")
 
   # Parse text
-  json_content <- jsonlite::fromJSON(httr::content(raw, "text"))
+  json_content <- jsonlite::fromJSON(raw_content)
 
   if (length(names(json_content)) == 3) {
     stop(json_content$message)
@@ -102,33 +113,30 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date) {
     }
   }
 
-  # Grab data for each ts id
-  content_dat <- lapply(1:length(json_content$data), function(x) {
+  ts_cols <- unlist(strsplit(json_content$columns[[1]], ","))
 
-    # Convert to data frame
-    current_dat <- tibble::as_tibble(json_content$data[[x]], .name_repair = "minimal")
-
-    if (nrow(current_dat) >= 1) {
-      # Add column names
-      colnames(current_dat) <- c(
-        "Timestamp",
-        "Value"
+  content_dat <- purrr::map_df(
+    1:length(json_content$data),
+    function(ts_chunk) {
+      ts_data <- tibble::as_tibble(
+        json_content$data[[ts_chunk]],
+        .name_repair = "minimal",
       )
 
-      current_dat <- dplyr::mutate(
-        current_dat,
-        Timestamp = lubridate::ymd_hms(current_dat$Timestamp),
-        Value = as.numeric(current_dat$Value),
-        ts_name = json_content$ts_name[[x]],
-        Units = json_content$ts_unitsymbol[[x]],
-        station_name = json_content$station_name[[x]]
+      names(ts_data) <- ts_cols
+
+      dplyr::mutate(
+        ts_data,
+        Timestamp = lubridate::ymd_hms(ts_data$Timestamp),
+        Value = as.numeric(ts_data$Value),
+        ts_name = json_content$ts_name[[ts_chunk]],
+        ts_id = json_content$ts_id[[ts_chunk]],
+        Units = json_content$ts_unitsymbol[[ts_chunk]],
+        station_name = json_content$station_name[[ts_chunk]],
+        station_id = json_content$station_id[[ts_chunk]]
       )
     }
-    current_dat
-  })
-
-
-  content_dat <- dplyr::bind_rows(content_dat)
+  )
 
   return(content_dat)
 }
