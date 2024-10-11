@@ -1,3 +1,17 @@
+kiwisR 0.2.2
+=========================
+### MINOR CHANGES
+* Now using `httr2` for all queries (#27)
+* Minimum R version bumped to 4.2.0 to allow for use of `|>` internally (#28)
+* Added code of conduct for contributing
+
+kiwisR 0.2.1
+=========================
+### MINOR CHANGES
+* All queries now have an optional argument `datasource` to allow for cases
+where multiple KiWIS end points are available. See your KiWIS documentation for
+more information on this parameter (#21)
+
 kiwisR 0.1.9
 =========================
 ### MINOR CHANGES
@@ -85,7 +99,7 @@ kiwisR 0.1.2
 * Added better HTTP request error handling using `tryCatch`
 * Added a `NEWS.md` file to track changes to the package.
 * Added Travis-Cl 
-* Removed broken hubs and added the [KISTERS example KiWIS server](http://kiwis.kisters.de/KiWIS/KiWIS?datasource=0&service=kisters&type=queryServices&request=getrequestinfo) as a default
+* Removed broken hubs and added the KISTERS example KiWIS server
   * This hub is now used for the unit tests
 * Default hubs now stored in list to streamline adding/removing/matching
 * Added badges to README

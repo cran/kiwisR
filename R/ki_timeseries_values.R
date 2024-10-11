@@ -5,11 +5,12 @@
 #' @param hub The KiWIS database you are querying. Either one of the defaults or a URL.
 #'  See \href{https://github.com/rywhale/kiwisR}{README}.
 #' @param ts_id Either: a single time series id or a vector of time series ids.
-#'  Time series ids can be found using the ki_timeseries_list function
+#'  Time series ids can be found using the `ki_timeseries_list` function.
 #' @param start_date A date string formatted "YYYY-MM-DD". Defaults to yesterday.
 #' @param end_date A date string formatted "YYYY-MM-DD". Defaults to today.
 #' @param return_fields (Optional) Specific fields to return. Consult your KiWIS hub services documentation for available options.
 #' Should be a comma separate string or a vector.
+#' @param datasource (Optional) The data source to be used, defaults to 0.
 #' @return A tibble with following columns by default: Timestamp, Value, ts_name, Units, station_name
 #' @examples
 #' \dontrun{
@@ -21,8 +22,8 @@
 #' )
 #' }
 #'
-ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields) {
-
+ki_timeseries_values <- function(hub, ts_id, start_date, end_date,
+                                 return_fields, datasource = 0) {
   # Default to past 24 hours
   if (missing(start_date) || missing(end_date)) {
     message("No start or end date provided, trying to return data for past 24 hours")
@@ -36,7 +37,7 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields
   if (missing(return_fields)) {
     return_fields <- "Timestamp,Value"
   } else {
-    if(!inherits(return_fields, "character")){
+    if (!inherits(return_fields, "character")) {
       stop(
         "User supplied return_fields must be comma separated string or vector of strings"
       )
@@ -55,20 +56,22 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields
   }
 
   # Metadata to return
-  ts_meta <- paste(c(
-    "ts_unitname",
-    "ts_unitsymbol",
-    "ts_name",
-    "ts_id",
-    "stationparameter_name",
-    "station_name",
-    "station_id"
-  ),
-  collapse = ","
+  ts_meta <- paste(
+    c(
+      "ts_unitname",
+      "ts_unitsymbol",
+      "ts_name",
+      "ts_id",
+      "stationparameter_name",
+      "station_name",
+      "station_id"
+    ),
+    collapse = ","
   )
 
   api_query <- list(
     service = "kisters",
+    datasource = datasource,
     type = "queryServices",
     request = "getTimeseriesValues",
     format = "json",
@@ -84,28 +87,21 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields
     )
   )
 
-  # Send request
-  raw <- tryCatch({
-    httr::GET(
-      url = api_url,
-      query = api_query,
-      httr::timeout(60)
-    )
-  }, error = function(e) {
-    return(e)
-  })
+  req <- httr2::request(api_url) |>
+    httr2::req_user_agent("kiwisR") |>
+    httr2::req_url_query(!!!api_query)
 
-  check_ki_response(raw)
+  resp <- httr2::req_perform(req)
 
-  # Parse response
-  raw_content <- httr::content(raw, "text")
+  httr2::resp_check_status(resp)
 
-  # Parse text
-  json_content <- jsonlite::fromJSON(raw_content)
+  # Parse JSON response
+  json_content <- httr2::resp_body_json(resp, simplifyVector = TRUE)
 
   if (length(names(json_content)) == 3) {
     stop(json_content$message)
   }
+
   if ("rows" %in% names(json_content)) {
     num_rows <- sum(as.numeric(json_content$rows))
     if (num_rows == 0) {
@@ -138,5 +134,5 @@ ki_timeseries_values <- function(hub, ts_id, start_date, end_date, return_fields
     }
   )
 
-  return(content_dat)
+  content_dat
 }

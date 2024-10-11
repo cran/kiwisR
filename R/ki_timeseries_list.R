@@ -9,36 +9,37 @@
 #' @param ts_name (Optional) A specific time series short name to search for. Supports the use of "*" as a wildcard.
 #' @param coverage (Optional) Whether or not to return period of record columns.
 #' Defaults to TRUE, change to FALSE for faster queries.
-#' @param group_id (Optional) A time series group id (see ki_group_list)
+#' @param group_id (Optional) A time series group id (see ki_group_list).
 #' @param return_fields (Optional) Specific fields to return. Consult your KiWIS hub services documentation for available options.
 #' Should be a comma separate string or a vector.
+#' @param datasource (Optional) The data source to be used, defaults to 0.
 #' @return A tibble containing all available time series for selected stations.
 #' @examples
 #' \dontrun{
 #' ki_timeseries_list(hub = "swmc", station_id = "146775")
 #' ki_timeseries_list(hub = "swmc", ts_name = "Vel*")
-#'}
+#' }
 #'
-
-ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_id, return_fields) {
+ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_id,
+                               return_fields, datasource = 0) {
   # Check for no input
   if (missing(station_id) & missing(ts_name) & missing(group_id)) {
     stop("No station_id, ts_name or group_id provided.")
   }
 
   # Account for user-provided return fields
-  if(missing(return_fields)){
+  if (missing(return_fields)) {
     # Default
     return_fields <- "station_name,station_id,ts_id,ts_name"
-  }else{
-    if(!inherits(return_fields, "character")){
+  } else {
+    if (!inherits(return_fields, "character")) {
       stop(
         "User supplied return_fields must be comma separated string or vector of strings"
       )
     }
 
     # Account for user listing coverage in return_fields
-    if(length(grepl("coverage", return_fields))){
+    if (length(grepl("coverage", return_fields))) {
       return_fields <- gsub(
         ",coverage|coverage,",
         "",
@@ -52,6 +53,7 @@ ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_
 
   api_query <- list(
     service = "kisters",
+    datasource = datasource,
     type = "queryServices",
     request = "getTimeseriesList",
     format = "json",
@@ -59,8 +61,8 @@ ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_
     returnfields = paste(
       return_fields,
       collapse = ","
-      )
     )
+  )
 
   if (!missing(station_id)) {
     # Account for multiple station_ids
@@ -68,10 +70,10 @@ ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_
     api_query[["station_id"]] <- station_id
   }
 
-  if(coverage == TRUE){
+  if (coverage == TRUE) {
     # Turn coverage columns on
-    api_query[['returnfields']] <- paste0(
-      api_query[['returnfields']],
+    api_query[["returnfields"]] <- paste0(
+      api_query[["returnfields"]],
       ",coverage"
     )
   }
@@ -82,41 +84,33 @@ ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_
   }
 
   # Check for group_id
-  if(!missing(group_id)){
+  if (!missing(group_id)) {
     api_query[["timeseriesgroup_id"]] <- group_id
-
   }
 
-  # Send request
-  raw <- tryCatch({
-    httr::GET(
-      url = api_url,
-      query = api_query,
-      httr::timeout(180)
-    )}, error = function(e){
-      return(e)
-    })
+  req <- httr2::request(api_url) |>
+    httr2::req_user_agent("kiwisR") |>
+    httr2::req_url_query(!!!api_query)
 
-  check_ki_response(raw)
+  resp <- httr2::req_perform(req)
 
-  # Parse response
-  raw_content <- httr::content(raw, "text")
+  httr2::resp_check_status(resp)
 
-  # Parse text
-  json_content <- jsonlite::fromJSON(raw_content)
+  # Parse JSON response
+  json_content <- httr2::resp_body_json(resp, simplifyVector = TRUE)
 
   # Check for special case single ts return
-  if(nrow(json_content) == 2){
+  if (nrow(json_content) == 2) {
     content_dat <- tibble::as_tibble(
       json_content,
       .name_repair = "minimal"
-      )[-1, ]
-  }else{
+    )[-1, ]
+  } else {
     # Convert to  tibble
     content_dat <- tibble::as_tibble(
       json_content[-1, ],
       .name_repair = "minimal"
-      )
+    )
   }
 
   # Add column names
@@ -139,10 +133,10 @@ ki_timeseries_list <- function(hub, station_id, ts_name, coverage = TRUE, group_
       content_dat,
       dplyr::vars(
         dplyr::one_of(c("from", "to"))
-        ),
+      ),
       lubridate::ymd_hms
     )
   )
 
- return(content_dat)
+  content_dat
 }

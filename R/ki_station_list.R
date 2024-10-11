@@ -5,12 +5,13 @@
 #' @param hub The KiWIS database you are querying. Either one of the defaults or a URL.
 #'  See \href{https://github.com/rywhale/kiwisR}{README}.
 #' @param search_term (Optional) A station name to search for. Supports the use of * as a wildcard. Case doesn't matter.
-#' @param bounding_box (Optional) A bounding box to search withhin for stations. Should be a vector or comma separated string
+#' @param bounding_box (Optional) A bounding box to search within for stations. Should be a vector or comma separated string.
 #' @param group_id (Optional) A station group id (see ki_group_list).
 #' with the following format: (min_x, min_y, max_x, max_y).
 #' @param return_fields (Optional) Specific fields to return. Consult your KiWIS hub services documentation for available options.
 #' Should be a comma separate string or a vector.
-#' @return Tibble containing station metdata.
+#' @param datasource (Optional) The data source to be used, defaults to 0.
+#' @return Tibble containing station metadata.
 #' @examples
 #' \dontrun{
 #' ki_station_list(hub = "swmc")
@@ -19,7 +20,8 @@
 #' ki_station_list(hub = "swmc", group_id = "518247")
 #' }
 #'
-ki_station_list <- function(hub, search_term, bounding_box, group_id, return_fields) {
+ki_station_list <- function(hub, search_term, bounding_box, group_id,
+                            return_fields, datasource = 0) {
   # Common strings for culling bogus stations
   garbage <- c(
     "^#", "^--", "testing",
@@ -44,6 +46,7 @@ ki_station_list <- function(hub, search_term, bounding_box, group_id, return_fie
   # Base query
   api_query <- list(
     service = "kisters",
+    datasource = datasource,
     type = "queryServices",
     request = "getStationList",
     format = "json",
@@ -75,27 +78,16 @@ ki_station_list <- function(hub, search_term, bounding_box, group_id, return_fie
     api_query[["stationgroup_id"]] <- group_id
   }
 
-  # Send request
-  raw <- tryCatch(
-    {
-      httr::GET(
-        url = api_url,
-        query = api_query,
-        httr::timeout(15)
-      )
-    },
-    error = function(e) {
-      return(e)
-    }
-  )
+  req <- httr2::request(api_url) |>
+    httr2::req_user_agent("kiwisR") |>
+    httr2::req_url_query(!!!api_query)
 
-  check_ki_response(raw)
+  resp <- httr2::req_perform(req)
 
-  # Parse response
-  raw_content <- httr::content(raw, "text")
+  httr2::resp_check_status(resp)
 
-  # Parse text
-  json_content <- jsonlite::fromJSON(raw_content)
+  # Parse JSON response
+  json_content <- httr2::resp_body_json(resp, simplifyVector = TRUE)
 
   # Check for empty search results
   if (inherits(json_content, "character")) {
@@ -130,5 +122,5 @@ ki_station_list <- function(hub, search_term, bounding_box, group_id, return_fie
     )
   )
 
-  return(content_dat)
+  content_dat
 }
